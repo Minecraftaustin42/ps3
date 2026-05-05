@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Login - Playsculpt</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Verdana;
+    background: #2b2d6e;
+    color: white;
+}
+
+.header {
+    background: #1f1f5a;
+    padding: 10px;
+    border-bottom: 3px solid black;
+    font-size: 20px;
+}
+
+.wrapper {
+    width: 900px;
+    margin: 40px auto;
+    display: flex;
+    gap: 20px;
+}
+
+.side {
+    width: 250px;
+    background: #3a3cc9;
+    border: 2px solid black;
+    padding: 15px;
+}
+
+.main {
+    flex: 1;
+    background: #3a3cc9;
+    border: 2px solid black;
+}
+
+.box-header {
+    background: #23257a;
+    padding: 10px;
+    border-bottom: 2px solid black;
+    font-weight: bold;
+}
+
+.box-content {
+    padding: 15px;
+}
+
+input {
+    width: 95%;
+    padding: 8px;
+    margin: 6px 0;
+    border: 2px solid black;
+}
+
+.button {
+    width: 100%;
+    padding: 10px;
+    background: #5a5dff;
+    border: 2px solid black;
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.button:hover {
+    background: #787aff;
+}
+
+.msg {
+    margin-top: 10px;
+    font-size: 14px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">Playsculpt</div>
+
+<div class="wrapper">
+
+    <!-- SIDE -->
+    <div class="side">
+        <b>Welcome Back</b>
+        <p>Log in to continue building, playing, and exploring.</p>
+
+        <hr>
+
+        <p>✔ Access your games</p>
+        <p>✔ Join friends</p>
+        <p>✔ Continue progress</p>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+        <div class="box-header">Login</div>
+
+        <div class="box-content">
+            <input id="username" placeholder="Username">
+            <input id="password" type="password" placeholder="Password">
+
+            <button class="button" onclick="login()">Login</button>
+
+            <div id="msg" class="msg"></div>
+
+            <br>
+            <a href="signup.html" style="color:white;">Create account</a>
+        </div>
+    </div>
+
+</div>
+
+<script>
+async function login() {
+    const msg = document.getElementById("msg");
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+
+    msg.style.color = "white";
+    msg.innerText = "Logging in...";
+
+    try {
+        const res = await fetch("/login", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            msg.style.color = "red";
+            msg.innerText = data.error;
+        } else {
+            msg.style.color = "lightgreen";
+            msg.innerText = "Success! Redirecting...";
+
+            setTimeout(() => {
+                window.location.href = "/platform.html";
+            }, 600);
+        }
+    } catch {
+        msg.style.color = "red";
+        msg.innerText = "Server error";
+    }
+}
+</script>
+
+</body>
+</html>
