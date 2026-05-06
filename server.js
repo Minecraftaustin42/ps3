@@ -24,7 +24,12 @@ if (!fs.existsSync("users.json")) fs.writeFileSync("users.json", "[]");
 const getUsers = () => JSON.parse(fs.readFileSync("users.json"));
 const saveUsers = (users) => fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
 const hashIp = (ip) => crypto.createHash("sha256").update(ip).digest("hex");
-const getClientIp = (req) => req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+app.set("trust proxy", true);
+const getClientIp = (req) => {
+    const fromForwarded = req.headers["x-forwarded-for"]?.split(",")[0]?.trim();
+    const fromReal = req.headers["x-real-ip"] || req.headers["cf-connecting-ip"];
+    return fromForwarded || fromReal || req.ip || req.socket.remoteAddress || "unknown";
+};
 const randomSixDigit = () => String(Math.floor(100000 + Math.random() * 900000));
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const validInput = (username, password) => username.length >= 1 && username.length <= 20 && password.length >= 8 && password.length <= 100 && /^[a-zA-Z0-9_]+$/.test(username);
@@ -171,6 +176,7 @@ app.post('/login/verify', async (req, res) => {
 app.get('/me', (req, res) => { if (!req.session.user) return res.status(401).json({ user: null }); res.json({ user: req.session.user }); });
 app.get('/platform.html', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'platform.html')));
 app.get('/settings.html', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'settings.html')));
+app.get('/studio.html', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'studio.html')));
 app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login.html')));
 
 app.listen(PORT, () => console.log('Running on http://localhost:' + PORT));
