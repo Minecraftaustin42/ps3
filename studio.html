@@ -37,13 +37,26 @@
 </div>
 
 <script>
+
+function installTinyThreeFallback() {
+  const noop=()=>{};
+  class V3 { constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;} set(x,y,z){this.x=x;this.y=y;this.z=z;return this;} clone(){return new V3(this.x,this.y,this.z);} add(v){this.x+=v.x;this.y+=v.y;this.z+=v.z;return this;} addScaledVector(v,s){this.x+=v.x*s;this.y+=v.y*s;this.z+=v.z*s;return this;} }
+  class Obj { constructor(){this.position=new V3();this.name='';} }
+  class Scene extends Obj { constructor(){super();this.children=[];this.background=null;} add(o){this.children.push(o);} }
+  class PerspectiveCamera extends Obj { constructor(){super();this.aspect=1;} updateProjectionMatrix(){} lookAt(){} }
+  class WebGLRenderer { constructor(opts){this.domElement=opts.canvas;this.ctx=this.domElement.getContext('2d');} setSize(w,h){this.domElement.width=w;this.domElement.height=h;} render(scene,camera){const c=this.ctx;if(!c)return;c.fillStyle='#0b0f35';c.fillRect(0,0,this.domElement.width,this.domElement.height);c.strokeStyle='#88aaff';c.beginPath();c.moveTo(0,this.domElement.height*0.6);c.lineTo(this.domElement.width,this.domElement.height*0.6);c.stroke();c.fillStyle='#c9d3ff';c.fillText('Tiny fallback renderer active',10,20);} }
+  class Mesh extends Obj { constructor(g,m){super();this.geometry=g;this.material=m;} }
+  class BoxGeometry { constructor(w,h,d){this.w=w;this.h=h;this.d=d;} }
+  class MeshStandardMaterial { constructor(o){this.color=o.color;} }
+  class DirectionalLight extends Obj {}
+  class AmbientLight extends Obj {}
+  class GridHelper extends Obj {}
+  class Color { constructor(v){this.value=v;} }
+  window.THREE = { Scene, PerspectiveCamera, WebGLRenderer, DirectionalLight, AmbientLight, GridHelper, Mesh, BoxGeometry, MeshStandardMaterial, Vector3:V3, Color };
+}
+
 function bootStudio() {
-  if (!window.THREE) {
-    document.getElementById('engine-status').textContent = 'Three.js failed to load.';
-    document.getElementById('add-part-btn').disabled = true;
-    document.getElementById('viewport-wrap').innerHTML = '<div style="padding:16px;color:#ffb3b3;">3D engine unavailable. Check network/CDN access.</div>';
-    return;
-  }
+  if (!window.THREE) { installTinyThreeFallback(); document.getElementById('engine-status').textContent = 'Using built-in fallback renderer.'; }
 
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0f35);
   const camera = new THREE.PerspectiveCamera(75, 2, 0.1, 1000); camera.position.set(0,6,16);
