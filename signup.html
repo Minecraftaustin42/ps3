@@ -4,128 +4,167 @@
 <title>Signup - Playsculpt</title>
 
 <style>
-body {
-    margin: 0;
-    font-family: Verdana;
-    background: #2b2d6e;
-    color: white;
-}
-
-/* header */
-.header {
-    background: #1f1f5a;
-    padding: 10px;
-    border-bottom: 3px solid black;
-    font-size: 20px;
-}
-
-/* layout */
-.wrapper {
-    width: 900px;
-    margin: 40px auto;
-    display: flex;
-    gap: 20px;
-}
-
-/* left panel */
-.side {
-    width: 250px;
-    background: #3a3cc9;
-    border: 2px solid black;
-    padding: 15px;
-}
-
-/* main box */
-.main {
-    flex: 1;
-    background: #3a3cc9;
-    border: 2px solid black;
-}
-
-.box-header {
-    background: #23257a;
-    padding: 10px;
-    border-bottom: 2px solid black;
-    font-weight: bold;
-}
-
-.box-content {
-    padding: 15px;
-}
-
-/* inputs */
-input {
-    width: 95%;
-    padding: 8px;
-    margin: 6px 0;
-    border: 2px solid black;
-}
-
-/* button */
-.button {
-    width: 100%;
-    padding: 10px;
-    background: #5a5dff;
-    border: 2px solid black;
-    color: white;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.button:hover {
-    background: #787aff;
-}
-
-.msg {
-    margin-top: 10px;
-    font-size: 14px;
-}
+body { margin: 0; font-family: Verdana; background: #2b2d6e; color: white; }
+.header { background: #1f1f5a; padding: 10px; border-bottom: 3px solid black; font-size: 20px; }
+.wrapper { width: 900px; margin: 40px auto; display: flex; gap: 20px; }
+.side { width: 250px; background: #3a3cc9; border: 2px solid black; padding: 15px; }
+.main { flex: 1; background: #3a3cc9; border: 2px solid black; }
+.box-header { background: #23257a; padding: 10px; border-bottom: 2px solid black; font-weight: bold; }
+.box-content { padding: 15px; }
+input { width: 95%; padding: 8px; margin: 6px 0; border: 2px solid black; }
+.button { width: 100%; padding: 10px; background: #5a5dff; border: 2px solid black; color: white; cursor: pointer; font-weight: bold; }
+.button:hover { background: #787aff; }
+.msg { margin-top: 10px; font-size: 14px; }
+.small { font-size: 12px; margin-top: 2px; opacity: 0.9; }
+.strength-wrap { margin: 6px 0 2px; }
+.strength-bar { width: 95%; height: 10px; border: 2px solid black; background: #444; }
+.strength-fill { height: 100%; width: 0%; background: #f55; transition: width 0.2s ease; }
 </style>
 </head>
 
 <body>
-
 <div class="header">Playsculpt</div>
-
 <div class="wrapper">
-
-    <!-- SIDE -->
     <div class="side">
         <b>Join Playsculpt</b>
         <p>Create games, explore worlds, and build your own creations.</p>
-
         <hr>
-
         <p>✔ Free to play</p>
         <p>✔ Create anything</p>
         <p>✔ Meet players</p>
     </div>
 
-    <!-- MAIN -->
     <div class="main">
         <div class="box-header">Create Account</div>
-
         <div class="box-content">
-            <input id="username" placeholder="Username">
-            <input id="password" type="password" placeholder="Password">
+            <input id="username" maxlength="20" placeholder="Username (1-20 chars)" oninput="checkUsernameAvailability()">
+            <div id="username-status" class="small">Type a username to check availability.</div>
+
+            <input id="password" maxlength="100" type="password" placeholder="Password (8-100 chars)" oninput="updatePasswordStrength()">
+            <div class="strength-wrap">
+                <div class="strength-bar"><div id="strength-fill" class="strength-fill"></div></div>
+            </div>
+            <div id="strength-label" class="small">Strength: Weak</div>
+
+            <input id="backupCode" placeholder="Optional backup code (SCULPT-9010101)">
+            <div class="small">Recommended: this helps with account recovery and signing in from another device successfully.</div>
+            <button class="button" type="button" onclick="generateBackupCode()">Generate Backup Security Code (Recommended)</button>
 
             <button class="button" onclick="signup()">Sign Up</button>
-
             <div id="msg" class="msg"></div>
-
             <br>
             <a href="login.html" style="color:white;">Already have an account?</a>
         </div>
     </div>
-
 </div>
 
 <script>
+let usernameTimer;
+
+async function checkUsernameAvailability() {
+    const el = document.getElementById("username");
+    const status = document.getElementById("username-status");
+    const username = el.value.trim();
+
+    clearTimeout(usernameTimer);
+
+    if (!username) {
+        status.style.color = "white";
+        status.innerText = "Type a username to check availability.";
+        return;
+    }
+
+    if (username.length > 20) {
+        status.style.color = "orange";
+        status.innerText = "Username must be 1-20 characters.";
+        return;
+    }
+
+    usernameTimer = setTimeout(async () => {
+        try {
+            const res = await fetch(`/username-available?username=${encodeURIComponent(username)}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                status.style.color = "orange";
+                status.innerText = data.error;
+            } else if (data.available) {
+                status.style.color = "lightgreen";
+                status.innerText = "Username is available.";
+            } else {
+                status.style.color = "#ff8c8c";
+                status.innerText = "Username is taken.";
+            }
+        } catch {
+            status.style.color = "orange";
+            status.innerText = "Could not check right now.";
+        }
+    }, 250);
+}
+
+function updatePasswordStrength() {
+    const password = document.getElementById("password").value;
+    const fill = document.getElementById("strength-fill");
+    const label = document.getElementById("strength-label");
+
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    if (password.length < 8) {
+        fill.style.width = "20%";
+        fill.style.background = "#f55";
+        label.innerText = "Strength: Weak (must be at least 8 characters)";
+        return;
+    }
+
+    if (score <= 2) {
+        fill.style.width = "40%";
+        fill.style.background = "#f55";
+        label.innerText = "Strength: Weak";
+    } else if (score === 3) {
+        fill.style.width = "70%";
+        fill.style.background = "#ffcc33";
+        label.innerText = "Strength: Medium";
+    } else {
+        fill.style.width = "100%";
+        fill.style.background = "#47d147";
+        label.innerText = "Strength: Strong";
+    }
+}
+
+function generateBackupCode() {
+    const digitsLength = Math.floor(Math.random() * 6) + 7;
+    let digits = "";
+    for (let i = 0; i < digitsLength; i++) digits += Math.floor(Math.random() * 10);
+    document.getElementById("backupCode").value = `SCULPT-${digits}`;
+}
+
 async function signup() {
     const msg = document.getElementById("msg");
-
     const username = document.getElementById("username").value.trim();
     const password = document.getElementById("password").value.trim();
+    const backupCode = document.getElementById("backupCode").value.trim();
+
+    if (username.length < 1 || username.length > 20) {
+        msg.style.color = "red";
+        msg.innerText = "Username must be 1-20 characters.";
+        return;
+    }
+
+    if (password.length < 8 || password.length > 100) {
+        msg.style.color = "red";
+        msg.innerText = "Password must be 8-100 characters.";
+        return;
+    }
+
+    if (backupCode && !/^SCULPT-[0-9]{7,12}$/.test(backupCode)) {
+        msg.style.color = "red";
+        msg.innerText = "Backup code must match SCULPT-9010101 with 7-12 digits.";
+        return;
+    }
 
     msg.style.color = "white";
     msg.innerText = "Creating account...";
@@ -134,7 +173,7 @@ async function signup() {
         const res = await fetch("/signup", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password, backupCode })
         });
 
         const data = await res.json();
@@ -145,10 +184,7 @@ async function signup() {
         } else {
             msg.style.color = "lightgreen";
             msg.innerText = "Account created! Redirecting...";
-
-            setTimeout(() => {
-                window.location.href = "/platform.html";
-            }, 700);
+            setTimeout(() => { window.location.href = "/platform.html"; }, 700);
         }
     } catch {
         msg.style.color = "red";
