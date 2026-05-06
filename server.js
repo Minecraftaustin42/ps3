@@ -4,205 +4,139 @@ const bcrypt = require("bcrypt");
 const session = require("express-session");
 const path = require("path");
 const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const PORT = 3000;
+const CODE_TTL_MS = 15 * 60 * 1000;
+
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD
+    }
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.use(session({
-    name: "playsculpt.sid",
-    secret: "super-secret-change-this",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        sameSite: "lax"
-    }
-}));
-
+app.use(session({ name: "playsculpt.sid", secret: "super-secret-change-this", resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: "lax" } }));
 app.use(express.static(__dirname));
 
-if (!fs.existsSync("users.json")) {
-    fs.writeFileSync("users.json", "[]");
-}
-
-function getUsers() {
-    return JSON.parse(fs.readFileSync("users.json"));
-}
-
-function saveUsers(users) {
-    fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
-}
-
-function hashIp(ip) {
-    return crypto.createHash("sha256").update(ip).digest("hex");
-}
-
-function getClientIp(req) {
-    return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-}
+if (!fs.existsSync("users.json")) fs.writeFileSync("users.json", "[]");
+const getUsers = () => JSON.parse(fs.readFileSync("users.json"));
+const saveUsers = (users) => fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
+const hashIp = (ip) => crypto.createHash("sha256").update(ip).digest("hex");
+const getClientIp = (req) => req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
 
 function validInput(username, password) {
-    if (username.length < 1 || username.length > 20) return false;
-    if (password.length < 8 || password.length > 100) return false;
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) return false;
-    return true;
+    return username.length >= 1 && username.length <= 20 && password.length >= 8 && password.length <= 100 && /^[a-zA-Z0-9_]+$/.test(username);
 }
-
-function isValidSecurityCode(code) {
-    if (!code) return true;
-    return /^SCULPT-[0-9]{7,12}$/.test(code);
-}
+function randomSixDigit() { return String(Math.floor(100000 + Math.random() * 900000)); }
+function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
 
 app.get("/username-available", (req, res) => {
     const username = String(req.query.username || "").trim();
-
-    if (username.length < 1 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
-        return res.status(400).json({ error: "Username must be 1-20 letters, numbers, or _" });
-    }
-
-    const users = getUsers();
-    const taken = users.some(u => u.username.toLowerCase() === username.toLowerCase());
-
+    if (username.length < 1 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) return res.status(400).json({ error: "Username must be 1-20 letters, numbers, or _" });
+    const taken = getUsers().some(u => u.username.toLowerCase() === username.toLowerCase());
     res.json({ available: !taken });
 });
 
 app.post("/signup", async (req, res) => {
-    const { username, password, backupCode } = req.body;
-
-    if (!validInput(username, password)) {
-        return res.status(400).json({ error: "Username must be 1-20 chars and password must be 8-100 chars" });
-    }
-
-    if (!isValidSecurityCode(backupCode)) {
-        return res.status(400).json({ error: "Backup code must look like SCULPT-9010101 (7-12 digits)." });
-    }
-
-    let users = getUsers();
-
-    if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
-        return res.status(400).json({ error: "Username already exists" });
-    }
-
-    const hash = await bcrypt.hash(password, 12);
-    const backupCodeHash = backupCode ? await bcrypt.hash(backupCode, 12) : null;
-    const ipHash = hashIp(getClientIp(req));
-
-    users.push({
-        username,
-        password: hash,
-        backupCodeHash,
-        trustedIpHashes: [ipHash]
-    });
+    const { username, password } = req.body;
+    if (!validInput(username, password)) return res.status(400).json({ error: "Username must be 1-20 chars and password must be 8-100 chars" });
+    const users = getUsers();
+    if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: "Username already exists" });
+    users.push({ username, password: await bcrypt.hash(password, 12), trustedIpHashes: [hashIp(getClientIp(req))], email: null, emailVerified: false, emailCodeHash: null, emailCodeExpiresAt: null });
     saveUsers(users);
-
     req.session.user = username;
     res.json({ success: true });
 });
 
-app.post("/login", async (req, res) => {
+app.post('/settings/email', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
+    const email = String(req.body.email || "").trim().toLowerCase();
+    if (!isValidEmail(email)) return res.status(400).json({ error: "Enter a valid email." });
+    const users = getUsers();
+    const user = users.find(u => u.username === req.session.user);
+    if (!user) return res.status(404).json({ error: "User missing" });
+
+    const code = randomSixDigit();
+    user.email = email;
+    user.emailVerified = false;
+    user.emailCodeHash = await bcrypt.hash(code, 10);
+    user.emailCodeExpiresAt = Date.now() + CODE_TTL_MS;
+    saveUsers(users);
+
+    try {
+        await transporter.sendMail({ from: process.env.GMAIL_USER, to: email, subject: "Playsculpt email confirmation code", text: `Your Playsculpt code is ${code}. It expires in 15 minutes.` });
+    } catch {
+        return res.status(500).json({ error: "Could not send email. Check Gmail env vars." });
+    }
+
+    res.json({ message: "Confirmation code sent to your email." });
+});
+
+app.post('/settings/email/confirm', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
+    const code = String(req.body.code || "").trim();
+    const users = getUsers();
+    const user = users.find(u => u.username === req.session.user);
+    if (!user || !user.emailCodeHash || !user.emailCodeExpiresAt) return res.status(400).json({ error: "No confirmation in progress." });
+    if (Date.now() > user.emailCodeExpiresAt) return res.status(400).json({ error: "Code expired. Request a new one." });
+    if (!(await bcrypt.compare(code, user.emailCodeHash))) return res.status(400).json({ error: "Invalid code." });
+    user.emailVerified = true;
+    user.emailCodeHash = null;
+    user.emailCodeExpiresAt = null;
+    saveUsers(users);
+    res.json({ message: "Email confirmed successfully." });
+});
+
+app.post('/login', async (req, res) => {
     const { username, password } = req.body;
-
-    let users = getUsers();
-    let user = users.find(u => u.username === username);
-
-    if (!user) {
-        return res.status(401).json({ error: "Invalid login" });
-    }
-
-    const match = await bcrypt.compare(password, user.password);
-
-    if (!match) {
-        return res.status(401).json({ error: "Invalid login" });
-    }
-
+    const users = getUsers();
+    const user = users.find(u => u.username === username);
+    if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ error: "Invalid login" });
     user.trustedIpHashes = user.trustedIpHashes || [];
-
     const ipHash = hashIp(getClientIp(req));
-    const knownIp = user.trustedIpHashes.includes(ipHash);
-
-    if (!knownIp) {
-        req.session.pendingLogin = {
-            username: user.username,
-            passwordVerified: true,
-            ipHash
-        };
-        return res.status(403).json({
-            requiresVerification: true,
-            requiresBackupCode: Boolean(user.backupCodeHash),
-            error: "New login location detected. Please verify to continue."
-        });
+    if (!user.trustedIpHashes.includes(ipHash)) {
+        const pending = { username: user.username, ipHash, expiresAt: Date.now() + CODE_TTL_MS, requiresEmailCode: Boolean(user.email && user.emailVerified) };
+        if (pending.requiresEmailCode) {
+            const code = randomSixDigit();
+            pending.emailCodeHash = await bcrypt.hash(code, 10);
+            try {
+                await transporter.sendMail({ from: process.env.GMAIL_USER, to: user.email, subject: "Playsculpt suspicious login code", text: `Your Playsculpt login code is ${code}. It expires in 15 minutes.` });
+            } catch {
+                pending.requiresEmailCode = false;
+            }
+        }
+        req.session.pendingLogin = pending;
+        return res.status(403).json({ requiresVerification: true, requiresEmailCode: pending.requiresEmailCode, error: "New login location detected. Please verify to continue." });
     }
-
     req.session.user = user.username;
     res.json({ success: true });
 });
 
-app.post("/login/verify", async (req, res) => {
-    const { password, backupCode } = req.body;
+app.post('/login/verify', async (req, res) => {
     const pending = req.session.pendingLogin;
-
-    if (!pending?.username) {
-        return res.status(400).json({ error: "No verification request in progress." });
-    }
-
+    const { password, emailCode } = req.body;
+    if (!pending?.username) return res.status(400).json({ error: "No verification request in progress." });
+    if (Date.now() > pending.expiresAt) return res.status(400).json({ error: "Verification session expired. Login again." });
     const users = getUsers();
     const user = users.find(u => u.username === pending.username);
-
-    if (!user) {
-        return res.status(401).json({ error: "Invalid login" });
+    if (!user || !(await bcrypt.compare(String(password || ""), user.password))) return res.status(401).json({ error: "Password re-check failed." });
+    if (pending.requiresEmailCode) {
+        if (!emailCode || !(await bcrypt.compare(String(emailCode), pending.emailCodeHash || ""))) return res.status(401).json({ error: "Invalid email verification code." });
     }
-
-    const passwordOk = await bcrypt.compare(String(password || ""), user.password);
-    if (!passwordOk) {
-        return res.status(401).json({ error: "Password re-check failed." });
-    }
-
-    if (user.backupCodeHash) {
-        const codeOk = await bcrypt.compare(String(backupCode || ""), user.backupCodeHash);
-        if (!codeOk) {
-            return res.status(401).json({ error: "Backup security code is incorrect." });
-        }
-    }
-
     user.trustedIpHashes = user.trustedIpHashes || [];
-    if (!user.trustedIpHashes.includes(pending.ipHash)) {
-        user.trustedIpHashes.push(pending.ipHash);
-        saveUsers(users);
-    }
-
+    if (!user.trustedIpHashes.includes(pending.ipHash)) { user.trustedIpHashes.push(pending.ipHash); saveUsers(users); }
     req.session.user = user.username;
     delete req.session.pendingLogin;
-
     res.json({ success: true });
 });
 
-app.get("/me", (req, res) => {
-    if (!req.session.user) {
-        return res.status(401).json({ user: null });
-    }
-    res.json({ user: req.session.user });
-});
+app.get('/me', (req, res) => { if (!req.session.user) return res.status(401).json({ user: null }); res.json({ user: req.session.user }); });
+app.get('/platform.html', (req, res, next) => !req.session.user ? res.redirect('/login.html') : next(), (req, res) => res.sendFile(path.join(__dirname, 'platform.html')));
+app.get('/logout', (req, res) => req.session.destroy(() => res.redirect('/login.html')));
 
-function requireAuth(req, res, next) {
-    if (!req.session.user) {
-        return res.redirect("/login.html");
-    }
-    next();
-}
-
-app.get("/platform.html", requireAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, "platform.html"));
-});
-
-app.get("/logout", (req, res) => {
-    req.session.destroy(() => {
-        res.redirect("/login.html");
-    });
-});
-
-app.listen(PORT, () => {
-    console.log("Running on http://localhost:" + PORT);
-});
+app.listen(PORT, () => console.log('Running on http://localhost:' + PORT));
