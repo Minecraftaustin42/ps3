@@ -2,47 +2,26 @@
 <html>
 <head>
 <title>Playsculpt Platform</title>
-
 <style>
-body {
-    font-family: Verdana;
-    background: #2b2d6e;
-    color: white;
-    text-align: center;
-}
-
-.box {
-    margin: 100px auto;
-    width: 400px;
-    background: #3a3cc9;
-    border: 2px solid black;
-    padding: 20px;
-}
+body { font-family: Verdana; background: #2b2d6e; color: white; text-align: center; }
+.box { margin: 100px auto; width: 400px; background: #3a3cc9; border: 2px solid black; padding: 20px; }
 </style>
 </head>
-
 <body>
-
 <div class="box">
     <h2>Welcome to Playsculpt</h2>
     <p id="user"></p>
-
+    <a href="/settings.html" style="color:white;">Settings</a>
+    <br><br>
+    <button onclick="window.location.href='/studio.html'" style="background:#5a5dff;border:2px solid black;color:white;padding:8px 14px;cursor:pointer;">Open Studio</button>
+    <br><br>
     <a href="/logout" style="color:white;">Logout</a>
 </div>
-
 <script>
-// 🔒 confirm session
-fetch("/me")
-.then(res => res.json())
-.then(data => {
-    if (!data.user) {
-        window.location.href = "/login.html";
-    } else {
-        document.getElementById("user").innerText =
-            "Logged in as: " + data.user;
-    }
+fetch("/me").then(res => res.json()).then(data => {
+    if (!data.user) window.location.href = "/login.html";
+    else document.getElementById("user").innerText = "Logged in as: " + data.user;
 });
 </script>
-
 </body>
 </html>
