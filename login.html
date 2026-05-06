@@ -1,155 +1,29 @@
 <!DOCTYPE html>
-<html>
-<head>
-<title>Login - Playsculpt</title>
-
-<style>
-body {
-    margin: 0;
-    font-family: Verdana;
-    background: #2b2d6e;
-    color: white;
-}
-
-.header {
-    background: #1f1f5a;
-    padding: 10px;
-    border-bottom: 3px solid black;
-    font-size: 20px;
-}
-
-.wrapper {
-    width: 900px;
-    margin: 40px auto;
-    display: flex;
-    gap: 20px;
-}
-
-.side {
-    width: 250px;
-    background: #3a3cc9;
-    border: 2px solid black;
-    padding: 15px;
-}
-
-.main {
-    flex: 1;
-    background: #3a3cc9;
-    border: 2px solid black;
-}
-
-.box-header {
-    background: #23257a;
-    padding: 10px;
-    border-bottom: 2px solid black;
-    font-weight: bold;
-}
-
-.box-content {
-    padding: 15px;
-}
-
-input {
-    width: 95%;
-    padding: 8px;
-    margin: 6px 0;
-    border: 2px solid black;
-}
-
-.button {
-    width: 100%;
-    padding: 10px;
-    background: #5a5dff;
-    border: 2px solid black;
-    color: white;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.button:hover {
-    background: #787aff;
-}
-
-.msg {
-    margin-top: 10px;
-    font-size: 14px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="header">Playsculpt</div>
-
-<div class="wrapper">
-
-    <!-- SIDE -->
-    <div class="side">
-        <b>Welcome Back</b>
-        <p>Log in to continue building, playing, and exploring.</p>
-
-        <hr>
-
-        <p>✔ Access your games</p>
-        <p>✔ Join friends</p>
-        <p>✔ Continue progress</p>
-    </div>
-
-    <!-- MAIN -->
-    <div class="main">
-        <div class="box-header">Login</div>
-
-        <div class="box-content">
-            <input id="username" placeholder="Username">
-            <input id="password" type="password" placeholder="Password">
-
-            <button class="button" onclick="login()">Login</button>
-
-            <div id="msg" class="msg"></div>
-
-            <br>
-            <a href="signup.html" style="color:white;">Create account</a>
-        </div>
-    </div>
-
+<html><head><title>Login - Playsculpt</title><style>
+body { margin: 0; font-family: Verdana; background: #2b2d6e; color: white; }
+.header { background: #1f1f5a; padding: 10px; border-bottom: 3px solid black; font-size: 20px; }
+.wrapper { width: 900px; margin: 40px auto; display: flex; gap: 20px; }
+.side { width: 250px; background: #3a3cc9; border: 2px solid black; padding: 15px; }
+.main { flex: 1; background: #3a3cc9; border: 2px solid black; }
+.box-header { background: #23257a; padding: 10px; border-bottom: 2px solid black; font-weight: bold; }
+.box-content { padding: 15px; }
+input,.button { width: 95%; padding: 8px; margin: 6px 0; border: 2px solid black; }
+.button { background:#5a5dff; color:white; cursor:pointer; font-weight:bold; }
+.hidden {display:none;}
+</style></head><body>
+<div class="header">Playsculpt</div><div class="wrapper"><div class="side"><b>Welcome Back</b></div>
+<div class="main"><div class="box-header">Login</div><div class="box-content">
+<input id="username" placeholder="Username"><input id="password" type="password" placeholder="Password"><button class="button" onclick="login()">Login</button>
+<div id="verify-area" class="hidden">
+<hr><b>Suspicious login attempt</b><p>If you have a linked email, we sent a 6-digit code. If not, re-enter password to continue.</p>
+<input id="verify-password" type="password" placeholder="Re-enter password">
+<input id="verify-email-code" placeholder="Email 6-digit code (if sent)">
+<button class="button" onclick="verifyLogin()">Verify & Continue</button>
 </div>
-
+<div id="msg"></div><a href="signup.html" style="color:white;">Create account</a>
+</div></div></div>
 <script>
-async function login() {
-    const msg = document.getElementById("msg");
-
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value.trim();
-
-    msg.style.color = "white";
-    msg.innerText = "Logging in...";
-
-    try {
-        const res = await fetch("/login", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ username, password })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-            msg.style.color = "red";
-            msg.innerText = data.error;
-        } else {
-            msg.style.color = "lightgreen";
-            msg.innerText = "Success! Redirecting...";
-
-            setTimeout(() => {
-                window.location.href = "/platform.html";
-            }, 600);
-        }
-    } catch {
-        msg.style.color = "red";
-        msg.innerText = "Server error";
-    }
-}
-</script>
-
-</body>
-</html>
+let requireEmailCode=false;
+async function login(){const msg=document.getElementById('msg');const username=document.getElementById('username').value.trim();const password=document.getElementById('password').value.trim();msg.innerText='Logging in...';const res=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});const data=await res.json();if(data.requiresVerification){requireEmailCode=Boolean(data.requiresEmailCode);document.getElementById('verify-area').classList.remove('hidden');document.getElementById('verify-email-code').style.display=requireEmailCode?'block':'none';msg.innerText=requireEmailCode?'New IP detected. Check your email for a 6-digit code.':'New IP detected. Re-enter password to continue.';return;}msg.style.color=res.ok?'lightgreen':'red';msg.innerText=res.ok?'Success! Redirecting...':data.error;if(res.ok)setTimeout(()=>window.location.href='/platform.html',500);}
+async function verifyLogin(){const msg=document.getElementById('msg');const password=document.getElementById('verify-password').value.trim();const emailCode=document.getElementById('verify-email-code').value.trim();const res=await fetch('/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password,emailCode})});const data=await res.json();msg.style.color=res.ok?'lightgreen':'red';msg.innerText=res.ok?'Verification successful! Redirecting...':data.error;if(res.ok)setTimeout(()=>window.location.href='/platform.html',500);}
+</script></body></html>
