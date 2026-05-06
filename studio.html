@@ -70,6 +70,25 @@ function bootStudio() {
   document.querySelectorAll('.resizer-v').forEach(r=>{r.addEventListener('mousedown',e=>{e.preventDefault();const left=document.getElementById(r.dataset.left),right=document.getElementById(r.dataset.right);const startX=e.clientX,startL=left.getBoundingClientRect().width,startR=right.getBoundingClientRect().width;function mm(ev){const dx=ev.clientX-startX;left.style.width=(startL+dx)+'px';right.style.width=(startR-dx)+'px';resize();}function mu(){window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu);}window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);});});
 }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js" onload="bootStudio()" onerror="bootStudio()"></script>
+<script>
+(function loadThreeWithFallback(){
+  const urls=[
+    "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js",
+    "https://unpkg.com/three@0.162.0/build/three.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r162/three.min.js"
+  ];
+  let i=0;
+  function tryNext(){
+    if(i>=urls.length){bootStudio();return;}
+    const src=urls[i++];
+    const tag=document.createElement("script");
+    tag.src=src;
+    tag.onload=()=>bootStudio();
+    tag.onerror=()=>tryNext();
+    document.body.appendChild(tag);
+  }
+  tryNext();
+})();
+</script>
 </body>
 </html>
