@@ -8,6 +8,7 @@ body {font-family: Verdana; background:#2b2d6e; color:white; text-align:center;}
 input,button{width:90%;padding:8px;margin:6px 0;border:2px solid black;}
 button{background:#5a5dff;color:#fff;cursor:pointer;}
 .hidden { display:none; }
+.section {border-top:1px solid rgba(255,255,255,.3); margin-top:16px; padding-top:16px;}
 </style>
 </head>
 <body>
@@ -20,7 +21,7 @@ button{background:#5a5dff;color:#fff;cursor:pointer;}
 <input id="email-code" placeholder="Enter confirmation code">
 <button onclick="confirmEmail()">Confirm Email</button>
 </div>
-<div id="change-email-area" class="hidden">
+<div id="change-email-area" class="hidden section">
 <h3>Change Email</h3>
 <input id="new-email" placeholder="New email">
 <input id="current-password" type="password" placeholder="Current password">
@@ -28,15 +29,29 @@ button{background:#5a5dff;color:#fff;cursor:pointer;}
 <input id="change-email-code" placeholder="Enter code sent to new email">
 <button onclick="confirmChangedEmail()">Confirm New Email</button>
 </div>
+<div class="section">
+<h3>Change Password</h3>
+<input id="pw-current" type="password" placeholder="Current password">
+<input id="pw-new" type="password" placeholder="New password (8-100 chars)">
+<input id="pw-confirm" type="password" placeholder="Confirm new password">
+<button onclick="changePassword()">Submit Password Change</button>
+<div id="pw-code-area" class="hidden">
+<input id="pw-code" placeholder="6-digit email code">
+<button onclick="confirmPasswordCode()">Confirm Password Change</button>
+</div>
+</div>
 <div id="settings-msg"></div>
 <br><a href="/platform.html" style="color:white;">Back to platform</a> | <a href="/logout" style="color:white;">Logout</a>
 </div>
 <script>
-async function loadSettings(){const res=await fetch('/settings/me');const data=await res.json();if(!res.ok){location.href='/login.html';return;}const text=data.emailVerified?`Linked email: ${data.email}`:'No verified email linked.';document.getElementById('current-email').innerText=text;document.getElementById('change-email-area').classList.toggle('hidden',!data.emailVerified);}
-async function linkEmail(){const msg=document.getElementById('settings-msg');const email=document.getElementById('email').value.trim();const res=await fetch('/settings/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const data=await res.json();msg.style.color=res.ok?'lightgreen':'red';msg.innerText=data.message||data.error;}
-async function confirmEmail(){const msg=document.getElementById('settings-msg');const code=document.getElementById('email-code').value.trim();const res=await fetch('/settings/email/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await res.json();msg.style.color=res.ok?'lightgreen':'red';msg.innerText=data.message||data.error; if(res.ok) loadSettings();}
-async function changeEmail(){const msg=document.getElementById('settings-msg');const newEmail=document.getElementById('new-email').value.trim();const currentPassword=document.getElementById('current-password').value.trim();const res=await fetch('/settings/email/change',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newEmail,currentPassword})});const data=await res.json();msg.style.color=res.ok?'lightgreen':'red';msg.innerText=data.message||data.error;}
-async function confirmChangedEmail(){const msg=document.getElementById('settings-msg');const code=document.getElementById('change-email-code').value.trim();const res=await fetch('/settings/email/change/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await res.json();msg.style.color=res.ok?'lightgreen':'red';msg.innerText=data.message||data.error;if(res.ok) loadSettings();}
+async function loadSettings(){const res=await fetch('/settings/me');const data=await res.json();if(!res.ok){location.href='/login.html';return;}const text=data.emailVerified?`Linked email: ${data.email}`:'No verified email linked.';document.getElementById('current-email').innerText=text;document.getElementById('change-email-area').classList.toggle('hidden',!data.emailVerified);} 
+function setMsg(ok,text){const msg=document.getElementById('settings-msg');msg.style.color=ok?'lightgreen':'red';msg.innerText=text;}
+async function linkEmail(){const email=document.getElementById('email').value.trim();const res=await fetch('/settings/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const data=await res.json();setMsg(res.ok,data.message||data.error);} 
+async function confirmEmail(){const code=document.getElementById('email-code').value.trim();const res=await fetch('/settings/email/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await res.json();setMsg(res.ok,data.message||data.error); if(res.ok) loadSettings();}
+async function changeEmail(){const newEmail=document.getElementById('new-email').value.trim();const currentPassword=document.getElementById('current-password').value.trim();const res=await fetch('/settings/email/change',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newEmail,currentPassword})});const data=await res.json();setMsg(res.ok,data.message||data.error);} 
+async function confirmChangedEmail(){const code=document.getElementById('change-email-code').value.trim();const res=await fetch('/settings/email/change/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await res.json();setMsg(res.ok,data.message||data.error);if(res.ok) loadSettings();}
+async function changePassword(){const currentPassword=document.getElementById('pw-current').value.trim();const newPassword=document.getElementById('pw-new').value;const confirmPassword=document.getElementById('pw-confirm').value;const res=await fetch('/settings/password/change',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword,newPassword,confirmPassword})});const data=await res.json();setMsg(res.ok,data.message||data.error);if(res.ok&&data.requiresEmailCode){document.getElementById('pw-code-area').classList.remove('hidden');}if(res.ok&&!data.requiresEmailCode){document.getElementById('pw-code-area').classList.add('hidden');}}
+async function confirmPasswordCode(){const code=document.getElementById('pw-code').value.trim();const res=await fetch('/settings/password/change/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await res.json();setMsg(res.ok,data.message||data.error);if(res.ok){document.getElementById('pw-code-area').classList.add('hidden');}}
 loadSettings();
 </script>
 </body>

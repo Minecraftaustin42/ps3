@@ -15,15 +15,13 @@ input,.button { width: 95%; padding: 8px; margin: 6px 0; border: 2px solid black
 <div class="main"><div class="box-header">Login</div><div class="box-content">
 <input id="username" placeholder="Username"><input id="password" type="password" placeholder="Password"><button class="button" onclick="login()">Login</button>
 <div id="verify-area" class="hidden">
-<hr><b>Suspicious login attempt</b><p>If you have a linked email, we sent a 6-digit code. If not, re-enter password to continue.</p>
-<input id="verify-password" type="password" placeholder="Re-enter password">
-<input id="verify-email-code" placeholder="Email 6-digit code (if sent)">
+<hr><b>Suspicious login attempt</b><p>We sent a 6-digit code to your linked email. Enter it below to continue.</p>
+<input id="verify-email-code" placeholder="Email 6-digit code">
 <button class="button" onclick="verifyLogin()">Verify & Continue</button>
 </div>
 <div id="msg"></div><a href="signup.html" style="color:white;">Create account</a>
 </div></div></div>
 <script>
-let requireEmailCode=false;
-async function login(){const msg=document.getElementById('msg');const username=document.getElementById('username').value.trim();const password=document.getElementById('password').value.trim();msg.innerText='Logging in...';const res=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});const data=await res.json();if(data.requiresVerification){requireEmailCode=Boolean(data.requiresEmailCode);document.getElementById('verify-area').classList.remove('hidden');document.getElementById('verify-email-code').style.display=requireEmailCode?'block':'none';msg.innerText=requireEmailCode?'New IP detected. Check your email for a 6-digit code.':'New IP detected. Re-enter password to continue.';return;}msg.style.color=res.ok?'lightgreen':'red';msg.innerText=res.ok?'Success! Redirecting...':data.error;if(res.ok)setTimeout(()=>window.location.href='/platform.html',500);}
-async function verifyLogin(){const msg=document.getElementById('msg');const password=document.getElementById('verify-password').value.trim();const emailCode=document.getElementById('verify-email-code').value.trim();const res=await fetch('/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password,emailCode})});const data=await res.json();msg.style.color=res.ok?'lightgreen':'red';msg.innerText=res.ok?'Verification successful! Redirecting...':data.error;if(res.ok)setTimeout(()=>window.location.href='/platform.html',500);}
+async function login(){const msg=document.getElementById('msg');const username=document.getElementById('username').value.trim();const password=document.getElementById('password').value.trim();msg.innerText='Logging in...';const res=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});const data=await res.json();if(data.requiresVerification){document.getElementById('verify-area').classList.remove('hidden');msg.style.color='white';msg.innerText='New IP detected. Check your email for a 6-digit code.';return;}msg.style.color=res.ok?'lightgreen':'red';msg.innerText=res.ok?'Success! Redirecting...':data.error;if(res.ok)setTimeout(()=>window.location.href='/platform.html',500);}
+async function verifyLogin(){const msg=document.getElementById('msg');const emailCode=document.getElementById('verify-email-code').value.trim();const res=await fetch('/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emailCode})});const data=await res.json();msg.style.color=res.ok?'lightgreen':'red';msg.innerText=res.ok?'Verification successful! Redirecting...':data.error;if(res.ok)setTimeout(()=>window.location.href='/platform.html',500);}
 </script></body></html>

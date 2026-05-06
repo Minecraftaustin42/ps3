@@ -50,7 +50,7 @@ app.post("/signup", async (req, res) => {
     if (!validInput(username, password)) return res.status(400).json({ error: "Username must be 1-20 chars and password must be 8-100 chars" });
     const users = getUsers();
     if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: "Username already exists" });
-    users.push({ username, password: await bcrypt.hash(password, 12), trustedIpHashes: [hashIp(getClientIp(req))], email: null, emailVerified: false, emailCodeHash: null, emailCodeExpiresAt: null, pendingNewEmail: null });
+    users.push({ username, password: await bcrypt.hash(password, 12), trustedIpHashes: [hashIp(getClientIp(req))], email: null, emailVerified: false, emailCodeHash: null, emailCodeExpiresAt: null, pendingNewEmail: null, pendingPasswordReset: null });
     saveUsers(users);
     req.session.user = username;
     res.json({ success: true });
@@ -135,7 +135,47 @@ app.post('/settings/email/change/confirm', async (req, res) => {
     res.json({ message: "Email changed and verified." });
 });
 
-app.post('/login', async (req, res) => { /* unchanged */
+app.post('/settings/password/change', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    if (String(newPassword || '').length < 8 || String(newPassword || '').length > 100) return res.status(400).json({ error: "New password must be 8-100 characters." });
+    if (String(newPassword) !== String(confirmPassword)) return res.status(400).json({ error: "New passwords do not match." });
+
+    const users = getUsers();
+    const user = users.find(u => u.username === req.session.user);
+    if (!user) return res.status(404).json({ error: "User missing" });
+    if (!(await bcrypt.compare(String(currentPassword || ''), user.password))) return res.status(401).json({ error: "Current password is incorrect." });
+
+    if (user.email && user.emailVerified) {
+        const code = randomSixDigit();
+        user.pendingPasswordReset = { codeHash: await bcrypt.hash(code, 10), expiresAt: Date.now() + CODE_TTL_MS, newPasswordHash: await bcrypt.hash(String(newPassword), 12) };
+        saveUsers(users);
+        try { await transporter.sendMail({ from: process.env.GMAIL_USER, to: user.email, subject: "Playsculpt password change code", text: `Your Playsculpt password change code is ${code}. It expires in 15 minutes.` }); }
+        catch { return res.status(500).json({ error: "Could not send email. Check Gmail env vars." }); }
+        return res.json({ requiresEmailCode: true, message: "Verification code sent to your email." });
+    }
+
+    user.password = await bcrypt.hash(String(newPassword), 12);
+    saveUsers(users);
+    return res.json({ requiresEmailCode: false, message: "Password changed successfully." });
+});
+
+app.post('/settings/password/change/confirm', async (req, res) => {
+    if (!req.session.user) return res.status(401).json({ error: "Not logged in" });
+    const code = String(req.body.code || '').trim();
+    const users = getUsers();
+    const user = users.find(u => u.username === req.session.user);
+    const pending = user?.pendingPasswordReset;
+    if (!user || !pending) return res.status(400).json({ error: "No password change request in progress." });
+    if (Date.now() > pending.expiresAt) return res.status(400).json({ error: "Code expired. Start again." });
+    if (!(await bcrypt.compare(code, pending.codeHash))) return res.status(400).json({ error: "Invalid code." });
+    user.password = pending.newPasswordHash;
+    user.pendingPasswordReset = null;
+    saveUsers(users);
+    res.json({ message: "Password changed successfully." });
+});
+
+app.post('/login', async (req, res) => {
     const { username, password } = req.body;
     const users = getUsers();
     const user = users.find(u => u.username === username);
@@ -143,15 +183,16 @@ app.post('/login', async (req, res) => { /* unchanged */
     user.trustedIpHashes = user.trustedIpHashes || [];
     const ipHash = hashIp(getClientIp(req));
     if (!user.trustedIpHashes.includes(ipHash)) {
-        const pending = { username: user.username, ipHash, expiresAt: Date.now() + CODE_TTL_MS, requiresEmailCode: Boolean(user.email && user.emailVerified) };
-        if (pending.requiresEmailCode) {
+        if (user.email && user.emailVerified) {
             const code = randomSixDigit();
-            pending.emailCodeHash = await bcrypt.hash(code, 10);
+            const pending = { username: user.username, ipHash, expiresAt: Date.now() + CODE_TTL_MS, emailCodeHash: await bcrypt.hash(code, 10) };
+            req.session.pendingLogin = pending;
             try { await transporter.sendMail({ from: process.env.GMAIL_USER, to: user.email, subject: "Playsculpt suspicious login code", text: `Your Playsculpt login code is ${code}. It expires in 15 minutes.` }); }
-            catch { pending.requiresEmailCode = false; }
+            catch { return res.status(500).json({ error: "Could not send verification email." }); }
+            return res.status(403).json({ requiresVerification: true, requiresEmailCode: true, error: "New login location detected. Check your email for a verification code." });
         }
-        req.session.pendingLogin = pending;
-        return res.status(403).json({ requiresVerification: true, requiresEmailCode: pending.requiresEmailCode, error: "New login location detected. Please verify to continue." });
+        user.trustedIpHashes.push(ipHash);
+        saveUsers(users);
     }
     req.session.user = user.username;
     res.json({ success: true });
@@ -159,13 +200,12 @@ app.post('/login', async (req, res) => { /* unchanged */
 
 app.post('/login/verify', async (req, res) => {
     const pending = req.session.pendingLogin;
-    const { password, emailCode } = req.body;
+    const emailCode = String(req.body.emailCode || '').trim();
     if (!pending?.username) return res.status(400).json({ error: "No verification request in progress." });
     if (Date.now() > pending.expiresAt) return res.status(400).json({ error: "Verification session expired. Login again." });
     const users = getUsers();
     const user = users.find(u => u.username === pending.username);
-    if (!user || !(await bcrypt.compare(String(password || ""), user.password))) return res.status(401).json({ error: "Password re-check failed." });
-    if (pending.requiresEmailCode && (!emailCode || !(await bcrypt.compare(String(emailCode), pending.emailCodeHash || "")))) return res.status(401).json({ error: "Invalid email verification code." });
+    if (!user || !(await bcrypt.compare(emailCode, pending.emailCodeHash || ""))) return res.status(401).json({ error: "Invalid email verification code." });
     user.trustedIpHashes = user.trustedIpHashes || [];
     if (!user.trustedIpHashes.includes(pending.ipHash)) { user.trustedIpHashes.push(pending.ipHash); saveUsers(users); }
     req.session.user = user.username;
