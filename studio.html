@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Playsculpt Studio</title>
+  <style>
+    html, body { margin:0; height:100%; overflow:hidden; font-family:Verdana; background:#0f1240; color:#d7dcff; }
+    #app { display:grid; grid-template-rows:48px 1fr 105px; height:100%; }
+    #toolbar { background:#1b1f64; border-bottom:2px solid #000; display:flex; align-items:center; gap:10px; padding:0 10px; }
+    .btn { background:#3943b7; border:2px solid #000; color:#fff; padding:6px 10px; cursor:pointer; }
+    #middle { display:grid; grid-template-columns:180px 1fr 220px; min-height:0; }
+    .panel { background:#171b57; border-right:2px solid #000; overflow:auto; min-width:130px; }
+    #viewport-wrap { position:relative; min-width:350px; background:#0c1038; }
+    #viewport { width:100%; height:100%; display:block; }
+    #asset-panel { background:#13164e; border-top:2px solid #000; overflow:auto; }
+    .title { background:#252b88; padding:8px; border-bottom:2px solid #000; font-weight:bold; }
+    .row { padding:8px; border-bottom:1px solid rgba(255,255,255,.1); }
+    .resizer-v { width:6px; cursor:col-resize; background:#0d113c; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <b>Playsculpt Studio</b>
+    <button class="btn" id="add-part-btn">Add Part</button>
+    <button class="btn" onclick="location.href='platform.html'">Back</button>
+    <span id="engine-status" style="margin-left:auto;font-size:12px;"></span>
+  </div>
+  <div id="middle">
+    <div id="explorer" class="panel"><div class="title">Explorer</div><div id="explorer-list" class="row">Baseplate</div></div>
+    <div class="resizer-v" data-left="explorer" data-right="viewport-wrap"></div>
+    <div id="viewport-wrap"><canvas id="viewport"></canvas></div>
+    <div class="resizer-v" data-left="viewport-wrap" data-right="properties"></div>
+    <div id="properties" class="panel"><div class="title">Properties</div><div class="row">Select an object</div></div>
+  </div>
+  <div id="asset-panel"><div class="title">Assets</div><div class="row">Basic Parts, Materials, Meshes (placeholder)</div></div>
+</div>
+
+<script>
+function bootStudio() {
+  if (!window.THREE) {
+    document.getElementById('engine-status').textContent = 'Three.js failed to load.';
+    document.getElementById('add-part-btn').disabled = true;
+    document.getElementById('viewport-wrap').innerHTML = '<div style="padding:16px;color:#ffb3b3;">3D engine unavailable. Check network/CDN access.</div>';
+    return;
+  }
+
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0f35);
+  const camera = new THREE.PerspectiveCamera(75, 2, 0.1, 1000); camera.position.set(0,6,16);
+  const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('viewport'), antialias:true});
+  const light = new THREE.DirectionalLight(0xffffff,1); light.position.set(8,12,8); scene.add(light); scene.add(new THREE.AmbientLight(0x6677cc,0.7));
+  scene.add(new THREE.GridHelper(200,200,0x88aaff,0x334488));
+  const base = new THREE.Mesh(new THREE.BoxGeometry(30,1,30), new THREE.MeshStandardMaterial({color:0x3f7fc8})); base.position.y=-0.5; base.name='Baseplate'; scene.add(base);
+
+  let partCount=0;
+  function addPart(){const p=new THREE.Mesh(new THREE.BoxGeometry(2,2,2),new THREE.MeshStandardMaterial({color:0x9db1ff}));p.position.set(Math.random()*8-4,1,Math.random()*8-4);p.name='Part_'+(++partCount);scene.add(p);document.getElementById('explorer-list').innerHTML += '<div>'+p.name+'</div>';}
+  document.getElementById('add-part-btn').addEventListener('click', addPart);
+
+  function resize(){const el=document.getElementById('viewport-wrap');const w=el.clientWidth,h=el.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+  window.addEventListener('resize',resize);resize();
+
+  const keys={};window.addEventListener('keydown',e=>keys[e.code]=true);window.addEventListener('keyup',e=>keys[e.code]=false);
+  let yaw=0,pitch=-0.15;let dragging=false,lastX=0,lastY=0;
+  renderer.domElement.addEventListener('mousedown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});window.addEventListener('mouseup',()=>dragging=false);
+  window.addEventListener('mousemove',e=>{if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;yaw-=dx*0.003;pitch=Math.max(-1.4,Math.min(1.4,pitch-dy*0.003));});
+
+  function updateCam(dt){const sp=12*dt;const forward=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));const right=new THREE.Vector3(forward.z,0,-forward.x);if(keys['KeyW'])camera.position.addScaledVector(forward,sp);if(keys['KeyS'])camera.position.addScaledVector(forward,-sp);if(keys['KeyA'])camera.position.addScaledVector(right,-sp);if(keys['KeyD'])camera.position.addScaledVector(right,sp);if(keys['Space'])camera.position.y+=sp;if(keys['ShiftLeft'])camera.position.y-=sp;camera.lookAt(camera.position.clone().add(new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch))));}
+  let prev=performance.now();function loop(now){const dt=(now-prev)/1000;prev=now;updateCam(dt);renderer.render(scene,camera);requestAnimationFrame(loop);}requestAnimationFrame(loop);
+
+  document.querySelectorAll('.resizer-v').forEach(r=>{r.addEventListener('mousedown',e=>{e.preventDefault();const left=document.getElementById(r.dataset.left),right=document.getElementById(r.dataset.right);const startX=e.clientX,startL=left.getBoundingClientRect().width,startR=right.getBoundingClientRect().width;function mm(ev){const dx=ev.clientX-startX;left.style.width=(startL+dx)+'px';right.style.width=(startR-dx)+'px';resize();}function mu(){window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu);}window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);});});
+}
+</script>
+<script>
+(function loadThreeWithFallback(){
+  const urls=[
+    "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js",
+    "https://unpkg.com/three@0.162.0/build/three.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r162/three.min.js"
+  ];
+  let i=0;
+  function tryNext(){
+    if(i>=urls.length){bootStudio();return;}
+    const src=urls[i++];
+    const tag=document.createElement("script");
+    tag.src=src;
+    tag.onload=()=>bootStudio();
+    tag.onerror=()=>tryNext();
+    document.body.appendChild(tag);
+  }
+  tryNext();
+})();
+</script>
+</body>
+</html>
